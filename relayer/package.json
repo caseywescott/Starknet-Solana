@@ -1,0 +1,24 @@
+{
+  "name": "koji-relayer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "mint": "node --import tsx src/mint-from-cli.ts",
+    "listen": "node --import tsx src/listen-bridge-stub.ts",
+    "listen:dry": "RELAYER_DRY_RUN=1 node --import tsx src/listen-bridge-stub.ts",
+    "listen:live": "RELAYER_DRY_RUN=0 node --import tsx src/listen-bridge-stub.ts",
+    "preflight": "node --import tsx src/preflight.ts",
+    "preflight:solana": "PRECHECK_MODE=solana node --import tsx src/preflight.ts"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "dotenv": "^16.4.0",
+    "starknet": "^7.6.4",
+    "tsx": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  }
+}
