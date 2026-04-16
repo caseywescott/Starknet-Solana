@@ -1,0 +1,25 @@
+# Rust / Cairo
+**/target/
+solana/target/
+**/.snfoundry_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Solana
+test-ledger/
+.anchor/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
