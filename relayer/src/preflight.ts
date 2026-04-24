@@ -28,15 +28,22 @@ async function main() {
   }
 
   const solanaRpc = need("SOLANA_RPC_URL");
-  const relayerKeypairPath = need("RELAYER_KEYPAIR");
-  const programIdStr = need("KOJI_PROGRAM_ID");
+  const programIdStr = process.env.KOJI_PROGRAM_ID ?? process.env.KOJI_RECEIVER_PROGRAM_ID;
+  if (!programIdStr || programIdStr.trim().length === 0) {
+    throw new Error("Missing KOJI_PROGRAM_ID (or KOJI_RECEIVER_PROGRAM_ID)");
+  }
 
-  console.log("[preflight] loading relayer keypair...");
-  const relayer = loadKeypair(relayerKeypairPath);
   const programId = new PublicKey(programIdStr);
-
-  console.log(`[preflight] relayer pubkey: ${relayer.publicKey.toBase58()}`);
   console.log(`[preflight] program id: ${programId.toBase58()}`);
+
+  if (mode === "full") {
+    const relayerKeypairPath = need("RELAYER_KEYPAIR");
+    console.log("[preflight] loading relayer keypair...");
+    const relayer = loadKeypair(relayerKeypairPath);
+    console.log(`[preflight] relayer pubkey: ${relayer.publicKey.toBase58()}`);
+  } else {
+    console.log("[preflight] mode=solana (skipping relayer keypair decode)");
+  }
 
   if (mode === "full") {
     const starknetRpc = process.env.STARKNET_RPC_PRIMARY ?? process.env.STARKNET_RPC_URL;

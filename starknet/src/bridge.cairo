@@ -1,6 +1,22 @@
-//! KojiBridge — outbound bridge config + stub relay event.
-//! LayerZero send path is not wired yet; this contract now tracks destination config and
-//! exposes quote/config entrypoints expected by PRD §5.3.
+//! KojiBridge — outbound bridge config + send path.
+//! This keeps LayerZero endpoint wiring generic so we can swap in a concrete endpoint
+//! contract address per deployment environment.
+
+#[starknet::interface]
+pub trait ILayerZeroEndpoint<TContractState> {
+    fn lz_send(
+        ref self: TContractState,
+        dst_eid: u32,
+        dst_peer: felt252,
+        payload: Span<felt252>,
+    );
+    fn quote(
+        self: @TContractState,
+        dst_eid: u32,
+        dst_peer: felt252,
+        payload: Span<felt252>,
+    ) -> MessagingFee;
+}
 
 #[starknet::interface]
 pub trait IKojiBridge<TContractState> {
@@ -23,6 +39,8 @@ pub trait IKojiBridge<TContractState> {
         dst_peer: felt252,
     );
     fn get_destination(self: @TContractState) -> DestinationConfig;
+    fn set_endpoint(ref self: TContractState, endpoint: starknet::ContractAddress);
+    fn get_endpoint(self: @TContractState) -> starknet::ContractAddress;
 }
 
 #[derive(Copy, Drop, Serde)]
@@ -47,15 +65,32 @@ pub struct BridgeMintRequested {
     pub bpm: u16,
 }
 
+#[derive(Drop, starknet::Event)]
+pub struct BridgeMintSent {
+    pub composition_id: u256,
+    pub dst_eid: u32,
+    pub dst_peer: felt252,
+}
+
 #[starknet::contract]
 pub mod KojiBridge {
-    use super::{BridgeMintRequested, DestinationConfig, IKojiBridge, MessagingFee};
+    use super::{
+        BridgeMintRequested,
+        BridgeMintSent,
+        DestinationConfig,
+        IKojiBridge,
+        ILayerZeroEndpointDispatcher,
+        ILayerZeroEndpointDispatcherTrait,
+        MessagingFee,
+    };
+    use core::traits::TryInto;
     use starknet::get_caller_address;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
 
     #[storage]
     struct Storage {
         owner: starknet::ContractAddress,
+        endpoint: starknet::ContractAddress,
         dst_eid: u32,
         dst_peer: felt252,
     }
@@ -64,7 +99,9 @@ pub mod KojiBridge {
     #[derive(Drop, starknet::Event)]
     enum Event {
         BridgeMintRequested: BridgeMintRequested,
+        BridgeMintSent: BridgeMintSent,
         DestinationUpdated: DestinationUpdated,
+        EndpointUpdated: EndpointUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -73,9 +110,20 @@ pub mod KojiBridge {
         pub dst_peer: felt252,
     }
 
+    #[derive(Drop, starknet::Event)]
+    pub struct EndpointUpdated {
+        pub endpoint: starknet::ContractAddress,
+    }
+
     #[constructor]
-    fn constructor(ref self: ContractState, dst_eid: u32, dst_peer: felt252) {
+    fn constructor(
+        ref self: ContractState,
+        endpoint: starknet::ContractAddress,
+        dst_eid: u32,
+        dst_peer: felt252,
+    ) {
         self.owner.write(get_caller_address());
+        self.endpoint.write(endpoint);
         self.dst_eid.write(dst_eid);
         self.dst_peer.write(dst_peer);
     }
@@ -92,8 +140,25 @@ pub mod KojiBridge {
             bpm: u16,
         ) {
             let cfg = self.get_destination();
+            let endpoint = self.endpoint.read();
+            let zero_addr: starknet::ContractAddress = 0_felt252.try_into().unwrap();
             assert!(cfg.dst_eid != 0_u32, "bridge not configured");
             assert!(cfg.dst_peer != 0, "bridge not configured");
+            assert!(endpoint != zero_addr, "endpoint not configured");
+
+            let mut payload: Array<felt252> = array![];
+            payload.append(composition_id.low.into());
+            payload.append(composition_id.high.into());
+            payload.append(composer_solana);
+            payload.append(seed.low.into());
+            payload.append(seed.high.into());
+            payload.append(scale.into());
+            payload.append(rhythm_density.into());
+            payload.append(bpm.into());
+
+            let mut lz = ILayerZeroEndpointDispatcher { contract_address: endpoint };
+            lz.lz_send(cfg.dst_eid, cfg.dst_peer, payload.span());
+
             self
                 .emit(
                     BridgeMintRequested {
@@ -105,20 +170,35 @@ pub mod KojiBridge {
                         bpm,
                     },
                 );
+            self.emit(BridgeMintSent { composition_id, dst_eid: cfg.dst_eid, dst_peer: cfg.dst_peer });
         }
 
         fn quote_send(
             self: @ContractState,
             composition_id: u256,
         ) -> MessagingFee {
-            let _ = composition_id;
             let cfg = self.get_destination();
+            let endpoint = self.endpoint.read();
+            let zero_addr: starknet::ContractAddress = 0_felt252.try_into().unwrap();
             if cfg.dst_eid == 0_u32 {
                 return MessagingFee { native_fee: 0_u128, lz_token_fee: 0_u128 };
             };
+            if endpoint == zero_addr {
+                return MessagingFee { native_fee: 0_u128, lz_token_fee: 0_u128 };
+            };
 
-            // Stub quote until LayerZero endpoint wiring is complete.
-            MessagingFee { native_fee: 10_000_000_000_000_000_u128, lz_token_fee: 0_u128 }
+            let mut payload: Array<felt252> = array![];
+            payload.append(composition_id.low.into());
+            payload.append(composition_id.high.into());
+            payload.append(0); // composer_solana placeholder for quote
+            payload.append(0); // seed.low placeholder
+            payload.append(0); // seed.high placeholder
+            payload.append(0); // scale placeholder
+            payload.append(0); // rhythm_density placeholder
+            payload.append(0); // bpm placeholder
+
+            let lz = ILayerZeroEndpointDispatcher { contract_address: endpoint };
+            lz.quote(cfg.dst_eid, cfg.dst_peer, payload.span())
         }
 
         fn set_destination(
@@ -137,6 +217,16 @@ pub mod KojiBridge {
                 dst_eid: self.dst_eid.read(),
                 dst_peer: self.dst_peer.read(),
             }
+        }
+
+        fn set_endpoint(ref self: ContractState, endpoint: starknet::ContractAddress) {
+            assert!(get_caller_address() == self.owner.read(), "only owner");
+            self.endpoint.write(endpoint);
+            self.emit(EndpointUpdated { endpoint });
+        }
+
+        fn get_endpoint(self: @ContractState) -> starknet::ContractAddress {
+            self.endpoint.read()
         }
     }
 }

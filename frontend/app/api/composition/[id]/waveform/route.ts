@@ -1,20 +1,35 @@
 import { NextResponse } from "next/server";
+import { fetchCompositionMidiBytes } from "@/lib/koji-starknet";
+import { renderMidiWaveformPng } from "@/lib/midi-viz";
+import { getKojiComposerAddress, getStarknetRpcUrl } from "@/lib/starknet-env";
 
-/**
- * PNG waveform (PRD §7.4) — placeholder until `midi-viz` + `canvas` are wired.
- * Returns a minimal valid 1×1 PNG so marketplaces accept the URL.
- */
-const ONE_PIXEL_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64",
-);
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } },
+) {
+  const contract = getKojiComposerAddress();
+  if (!getStarknetRpcUrl() || !contract) {
+    return new NextResponse(null, { status: 503 });
+  }
 
-export async function GET() {
-  return new NextResponse(ONE_PIXEL_PNG, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "public, max-age=31536000, immutable",
-    },
-  });
+  let compositionId: bigint;
+  try {
+    compositionId = BigInt(params.id);
+  } catch {
+    return new NextResponse(null, { status: 400 });
+  }
+
+  try {
+    const midi = await fetchCompositionMidiBytes(contract, compositionId);
+    const png = renderMidiWaveformPng(midi);
+    return new NextResponse(new Uint8Array(png), {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+  } catch {
+    return new NextResponse(null, { status: 502 });
+  }
 }

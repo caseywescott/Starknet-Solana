@@ -56,12 +56,10 @@ if ! command -v solana >/dev/null 2>&1; then
   exit 1
 fi
 
-ANCHOR_ARGS=()
-if [[ -n "$PROVIDER_URL" ]]; then
-  ANCHOR_ARGS+=(--provider.url "$PROVIDER_URL")
-fi
+BUILD_ARGS=(--provider.cluster "$CLUSTER")
+DEPLOY_ARGS=(--provider.cluster "$CLUSTER")
 if [[ -n "$WALLET" ]]; then
-  ANCHOR_ARGS+=(--provider.wallet "$WALLET")
+  DEPLOY_ARGS+=(--provider.wallet "$WALLET")
 fi
 
 SOLANA_URL=""
@@ -90,15 +88,22 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
   echo "Running anchor build ..."
   (
     cd "$SOLANA_DIR"
-    anchor build "${ANCHOR_ARGS[@]}"
+    anchor build "${BUILD_ARGS[@]}"
   )
 fi
 
 echo "Running anchor deploy ..."
-DEPLOY_OUT="$(
-  cd "$SOLANA_DIR" && \
-  anchor deploy "${ANCHOR_ARGS[@]}"
-)"
+if [[ -n "$PROVIDER_URL" ]]; then
+  DEPLOY_OUT="$(
+    cd "$SOLANA_DIR" && \
+    ANCHOR_PROVIDER_URL="$PROVIDER_URL" anchor deploy "${DEPLOY_ARGS[@]}"
+  )"
+else
+  DEPLOY_OUT="$(
+    cd "$SOLANA_DIR" && \
+    anchor deploy "${DEPLOY_ARGS[@]}"
+  )"
+fi
 echo "$DEPLOY_OUT"
 
 PROGRAM_ID="$(awk '/koji_receiver/ {print $NF}' "$SOLANA_DIR/Anchor.toml" | tail -n1 | tr -d '"')"

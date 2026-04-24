@@ -16,3 +16,11 @@ export function getLzScanUrl(): string | undefined {
 export function getSolanaClusterExplorerBase(): string {
   return process.env.NEXT_PUBLIC_SOLANA_EXPLORER_BASE ?? "https://explorer.solana.com";
 }
+
+/** Solana transaction URL; default includes devnet cluster query. */
+export function getSolanaTxExplorerUrl(signature: string): string {
+  const template =
+    process.env.NEXT_PUBLIC_SOLANA_EXPLORER_TX ??
+    "https://explorer.solana.com/tx/{sig}?cluster=devnet";
+  return template.replace("{sig}", signature);
+}

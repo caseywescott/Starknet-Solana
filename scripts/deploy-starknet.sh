@@ -8,6 +8,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./scripts/deploy-starknet.sh \
+    --endpoint <LZ_ENDPOINT_CONTRACT_ADDRESS> \
     --dst-eid <SOLANA_EID_U32> \
     --dst-peer <SOLANA_PEER_AS_FELT252> \
     [--account <SNCAST_ACCOUNT>] \
@@ -16,16 +17,17 @@ Usage:
     [--composer-class-hash <CLASS_HASH>]
 
 Env fallbacks:
-  LZ_SOLANA_EID, LZ_SOLANA_PEER, SNCAST_ACCOUNT, SNCAST_NETWORK,
+  LZ_ENDPOINT_ADDRESS, LZ_SOLANA_EID, LZ_SOLANA_PEER, SNCAST_ACCOUNT, SNCAST_NETWORK,
   KOJI_BRIDGE_CLASS_HASH, KOJI_COMPOSER_CLASS_HASH
 
 Notes:
   - If class hashes are not provided, this script attempts sncast declare.
-  - Bridge constructor args: (dst_eid, dst_peer)
+  - Bridge constructor args: (endpoint, dst_eid, dst_peer)
   - Composer constructor args: (bridge_address)
 EOF
 }
 
+ENDPOINT="${LZ_ENDPOINT_ADDRESS:-}"
 DST_EID="${LZ_SOLANA_EID:-}"
 DST_PEER="${LZ_SOLANA_PEER:-}"
 ACCOUNT="${SNCAST_ACCOUNT:-}"
@@ -35,6 +37,8 @@ COMPOSER_CLASS_HASH="${KOJI_COMPOSER_CLASS_HASH:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --endpoint)
+      ENDPOINT="${2:-}"; shift 2 ;;
     --dst-eid)
       DST_EID="${2:-}"; shift 2 ;;
     --dst-peer)
@@ -65,8 +69,8 @@ if ! command -v scarb >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -z "$DST_EID" || -z "$DST_PEER" ]]; then
-  echo "Missing required args: --dst-eid and --dst-peer" >&2
+if [[ -z "$ENDPOINT" || -z "$DST_EID" || -z "$DST_PEER" ]]; then
+  echo "Missing required args: --endpoint, --dst-eid and --dst-peer" >&2
   usage
   exit 1
 fi
@@ -124,12 +128,12 @@ if [[ -z "$BRIDGE_CLASS_HASH" || -z "$COMPOSER_CLASS_HASH" ]]; then
   exit 1
 fi
 
-echo "Deploying KojiBridge with constructor($DST_EID, $DST_PEER) ..."
+echo "Deploying KojiBridge with constructor($ENDPOINT, $DST_EID, $DST_PEER) ..."
 BRIDGE_DEPLOY_OUT="$(
   cd "$STARKNET_DIR" && \
   sncast deploy \
     --class-hash "$BRIDGE_CLASS_HASH" \
-    --constructor-calldata "$DST_EID" "$DST_PEER" \
+    --constructor-calldata "$ENDPOINT" "$DST_EID" "$DST_PEER" \
     "${SNCAST_ARGS[@]}"
 )"
 echo "$BRIDGE_DEPLOY_OUT"
@@ -160,6 +164,7 @@ echo "Verifying deployed contracts..."
 (
   cd "$STARKNET_DIR"
   sncast call --contract-address "$BRIDGE_ADDRESS" --function "get_destination" "${SNCAST_ARGS[@]}"
+  sncast call --contract-address "$BRIDGE_ADDRESS" --function "get_endpoint" "${SNCAST_ARGS[@]}"
   sncast call --contract-address "$COMPOSER_ADDRESS" --function "composition_count" "${SNCAST_ARGS[@]}"
 )
 
@@ -168,5 +173,6 @@ Deploy complete:
   KOJI_BRIDGE_CLASS_HASH=$BRIDGE_CLASS_HASH
   KOJI_COMPOSER_CLASS_HASH=$COMPOSER_CLASS_HASH
   KOJI_BRIDGE_ADDRESS=$BRIDGE_ADDRESS
+  LZ_ENDPOINT_ADDRESS=$ENDPOINT
   KOJI_COMPOSER_ADDRESS=$COMPOSER_ADDRESS
 EOF

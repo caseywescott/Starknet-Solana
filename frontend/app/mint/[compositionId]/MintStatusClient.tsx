@@ -4,7 +4,12 @@ import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import type { MintStatusPayload } from "@/lib/mint-status-types";
-import { getLzScanUrl, getSolanaClusterExplorerBase, getStarknetTxExplorerUrl } from "@/lib/chain-config";
+import {
+  getLzScanUrl,
+  getSolanaClusterExplorerBase,
+  getSolanaTxExplorerUrl,
+  getStarknetTxExplorerUrl,
+} from "@/lib/chain-config";
 import { fetchMidiForPlayback } from "@/lib/fetch-midi-with-fallback";
 import { playMidiBuffer } from "@/lib/tone-play-midi";
 
@@ -74,31 +79,59 @@ export function MintStatusClient({ compositionId }: Props) {
         <Step
           done={data?.renderer.ok === true}
           title="Renderer verified"
-          detail="GET /api/composition/:id returns metadata JSON."
-        />
-        <Step
-          done={false}
-          title="Bridging via LayerZero"
           detail={
-            lz ? (
-              <a className="text-koji-accent underline" href={lz} target="_blank" rel="noreferrer">
-                Open LayerZero scan
-              </a>
+            data ? (
+              <span>
+                metadata: {data.renderer.metadataOk ? "ok" : "pending"} · midi:{" "}
+                {data.renderer.midiOk ? "ok" : "pending"} · waveform:{" "}
+                {data.renderer.waveformOk ? "ok" : "pending"}
+                {data.renderer.error ? ` (${data.renderer.error})` : ""}
+              </span>
             ) : (
-              "Set NEXT_PUBLIC_LAYERZERO_SCAN_URL for a quick link."
+              "Checking renderer endpoints..."
             )
           }
         />
         <Step
-          done={false}
+          done={data?.bridge.ok === true}
+          title="Bridging via LayerZero"
+          detail={
+            lz ? (
+              <span>
+                {data?.bridge.note ?? "Bridge status unavailable."}{" "}
+                <a className="text-koji-accent underline" href={lz} target="_blank" rel="noreferrer">
+                  Open LayerZero scan
+                </a>
+              </span>
+            ) : (
+              data?.bridge.note ?? "Set NEXT_PUBLIC_LAYERZERO_SCAN_URL for a quick link."
+            )
+          }
+        />
+        <Step
+          done={data?.solana.ok === true}
           title="NFT on Solana"
           detail={
             <span>
-              Check{" "}
-              <a className="text-koji-accent underline" href={solBase} target="_blank" rel="noreferrer">
-                Solana explorer
-              </a>{" "}
-              after the relayer mints Metaplex Core.
+              {data?.solana.note ?? "Solana status unavailable."}{" "}
+              {data?.solana.signature ? (
+                <a
+                  className="text-koji-accent underline"
+                  href={getSolanaTxExplorerUrl(data.solana.signature)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View mint transaction
+                </a>
+              ) : (
+                <>
+                  Check{" "}
+                  <a className="text-koji-accent underline" href={solBase} target="_blank" rel="noreferrer">
+                    Solana explorer
+                  </a>{" "}
+                  for the minted asset.
+                </>
+              )}
             </span>
           }
         />

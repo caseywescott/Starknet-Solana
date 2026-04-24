@@ -39,24 +39,28 @@ Copy `.env.example` to `.env.local` when wiring RPC and contract addresses.
 `scripts/` now includes deploy/bootstrap helpers:
 
 - `deploy-starknet.sh` — build + declare + deploy `KojiBridge`/`KojiComposer` and verify calls.
-- `register-lz-peers.sh` — set/verify bridge destination config (`dst_eid`, `dst_peer`) on Starknet.
+- `register-lz-peers.sh` — set/verify bridge endpoint + destination config (`endpoint`, `dst_eid`, `dst_peer`) on Starknet.
 - `deploy-solana.sh` — build + deploy Anchor `koji_receiver` and verify deployed program account.
 - `bootstrap-env.sh` — generate a consistent env block for frontend + relayer from deployed ids.
+- `prewarm-renderer.sh` — warm `/api/composition/:id`, `/midi`, `/waveform` edge cache for demo reliability.
 
 Recommended order:
 
 ```bash
 # 1) Deploy Starknet contracts
-./scripts/deploy-starknet.sh --dst-eid <SOLANA_EID> --dst-peer <SOLANA_PEER_FELT>
+./scripts/deploy-starknet.sh --endpoint <LZ_ENDPOINT_ADDRESS> --dst-eid <SOLANA_EID> --dst-peer <SOLANA_PEER_FELT>
 
 # 2) (Optional) update destination config later
-./scripts/register-lz-peers.sh --bridge <KOJI_BRIDGE_ADDRESS> --dst-eid <SOLANA_EID> --dst-peer <SOLANA_PEER_FELT>
+./scripts/register-lz-peers.sh --bridge <KOJI_BRIDGE_ADDRESS> --endpoint <LZ_ENDPOINT_ADDRESS> --dst-eid <SOLANA_EID> --dst-peer <SOLANA_PEER_FELT>
 
 # 3) Deploy Solana receiver
 ./scripts/deploy-solana.sh --cluster devnet
 
 # 4) Generate env wiring for app + relayer
 ./scripts/bootstrap-env.sh --composer <KOJI_COMPOSER_ADDRESS> --bridge <KOJI_BRIDGE_ADDRESS> --solana-program <KOJI_PROGRAM_ID> --output .env.local
+
+# 5) Pre-warm renderer endpoints for demo compositions
+./scripts/prewarm-renderer.sh --base-url https://koji.xyz --ids 1-5
 ```
 
 ### Starknet contracts
@@ -68,7 +72,7 @@ Recommended order:
 
 Deploy outline:
 
-1. Run `./scripts/deploy-starknet.sh --dst-eid <SOLANA_EID> --dst-peer <SOLANA_PEER_FELT>`.
+1. Run `./scripts/deploy-starknet.sh --endpoint <LZ_ENDPOINT_ADDRESS> --dst-eid <SOLANA_EID> --dst-peer <SOLANA_PEER_FELT>`.
 2. Capture `KOJI_BRIDGE_ADDRESS` and `KOJI_COMPOSER_ADDRESS` from script output.
 3. Optionally adjust bridge destination later with `./scripts/register-lz-peers.sh ...`.
 4. Use `./scripts/bootstrap-env.sh ... --output .env.local` to wire frontend/relayer env vars.
@@ -108,8 +112,8 @@ cd relayer
 npm run preflight
 ```
 
-Preflight verifies required env vars, keypair decode, Starknet/Solana RPC reachability, and that `KOJI_PROGRAM_ID` exists as an executable program account on the configured Solana cluster.
-If Starknet is not deployed yet, run Solana-only checks with `npm run preflight:solana`.
+Preflight verifies required env vars, relayer keypair decode (full mode), Starknet/Solana RPC reachability, and that `KOJI_PROGRAM_ID` exists as an executable program account on the configured Solana cluster.
+If Starknet is not deployed yet, run Solana-only checks with `npm run preflight:solana` (does not require `RELAYER_KEYPAIR`).
 
 Convenience commands:
 
